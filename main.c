@@ -500,6 +500,38 @@ void set_node_type(void* node, NodeType type) {
    *((uint8_t*)(node + NODE_TYPE_OFFSET)) = value;
 }
 
+Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key) {
+   void* node = get_page(table->pager, page_num);
+   uint32_t num_keys = *internal_node_num_keys(node);
+
+   /*
+      二分搜索找到孩子的索引进行搜索
+   */
+  uint32_t min_index = 0;
+  uint32_t max_index = num_keys;
+
+  while(min_index != max_index) {
+   uint32_t index = (min_index + max_index) / 2;
+   uint32_t key_to_right = *internal_node_key(node, index);
+   if (key_to_right >= key) {
+      max_index = index;
+   } else {
+      min_index = index + 1;
+   }
+  }
+   /*
+      找到后的子节点可能是叶节点也可能是内部节点
+   */
+  uint32_t child_num = *internal_node_child(node, min_index);
+  void* child = get_page(table->pager, child_num);
+  switch (get_node_type(child)) {
+      case NODE_LEAF:
+         return leaf_node_find(table, child_num, key);
+      case NODE_INTERNAL:
+         return internal_node_find(table, child_num, key);
+  }
+}
+
 /*
    返回给定key的位置，如果key不存在，返回它应该插入的位置
 */
@@ -510,8 +542,7 @@ Cursor* table_find(Table* table, uint32_t key) {
    if (get_node_type(root_node) == NODE_LEAF) {
       return leaf_node_find(table, root_page_num, key); //是叶节点，在节点里查找
    } else {
-      printf("这里需要对b树内部节点搜索");
-      exit(EXIT_FAILURE);
+      return internal_node_find(table, root_page_num, key);
    }
 }
 //光标前进一行
